@@ -1,0 +1,6 @@
+[Desktop Entry]
+Name=Fixture Qt
+Comment=linux-app-scale CI fixture
+Exec=/usr/bin/true %u
+Type=Application
+Terminal=false

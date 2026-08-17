@@ -1,0 +1,14 @@
+# Example only — copy and edit. Not installed by default.
+# Blurry Chromium under fractional scale: X11 ozone + matching SCALE.
+# See docs/PLATFORM.md § Blurry Chromium.
+
+ID=example-chromium-x11
+TOOLKIT=chromium
+BINARY=/usr/bin/true
+VENDOR_DESKTOP=
+LOCAL_DESKTOP=
+SCALE=1.25
+EXTRA_FLAGS=--ozone-platform=x11
+EXTRA_ENV=
+REFRESH_FROM_VENDOR=0
+SOURCE=file

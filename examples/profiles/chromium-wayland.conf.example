@@ -1,0 +1,14 @@
+# Example only — copy and edit. Not installed by default.
+# Native Wayland Chromium (editor/IDE input path). No scale flag required
+# if the compositor already sizes the app; add SCALE= only if needed.
+
+ID=example-chromium-wayland
+TOOLKIT=chromium
+BINARY=/usr/bin/true
+VENDOR_DESKTOP=
+LOCAL_DESKTOP=
+SCALE=1.25
+EXTRA_FLAGS=--ozone-platform=wayland
+EXTRA_ENV=
+REFRESH_FROM_VENDOR=0
+SOURCE=file

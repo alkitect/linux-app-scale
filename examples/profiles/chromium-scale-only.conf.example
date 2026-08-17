@@ -1,0 +1,13 @@
+# Example only — copy and edit. Not installed by default.
+# Scale-only Chromium/Electron. Try this before adding ozone.
+
+ID=example-chromium
+TOOLKIT=chromium
+BINARY=/usr/bin/true
+VENDOR_DESKTOP=
+LOCAL_DESKTOP=
+SCALE=1.25
+EXTRA_FLAGS=
+EXTRA_ENV=
+REFRESH_FROM_VENDOR=0
+SOURCE=file
