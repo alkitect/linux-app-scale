@@ -1,0 +1,4 @@
+[Desktop Entry]
+Name=Fixture Flatpak
+Exec=/usr/bin/flatpak run org.example.App %U
+Type=Application

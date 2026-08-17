@@ -26,6 +26,7 @@ cd linux-app-scale
 ./scripts/install-to-local.sh
 app-scale add --desktop /var/lib/snapd/desktop/applications/signal-desktop_signal-desktop.desktop \
   --toolkit chromium --scale 1.25
+# Fully quit the app, then launch it from Activities (not a terminal).
 ```
 
 Replace the `.desktop` path and toolkit with **your** app (`chromium` for Electron/Chrome-family, `qt` for Qt). Pick `--scale` to match the size you want (common values: `1.25`, `1.5`, `2.0`).
@@ -63,8 +64,9 @@ app-scale remove --id ID --purge-config   # one app; GNOME falls back to the ven
 ## Configure
 
 - **Scale:** `--scale` on add, or `SCALE=` in `~/.config/linux-app-scale/profiles/<id>.conf`, or `DEVICE_SCALE_FACTOR=` in the global config.
-- **Blur vs lag vs window chrome:** optional `EXTRA_FLAGS` / `EXTRA_ENV` — see [docs/PLATFORM.md](docs/PLATFORM.md) and [examples/profiles/](examples/profiles/).
+- **Blur vs lag vs window chrome:** try scale-only first ([examples/README.md](examples/README.md)); extras in [docs/PLATFORM.md](docs/PLATFORM.md).
 - **Do not** put `--ozone-platform=x11` on every Chromium app; that is a per-problem opt-in.
+- **Do not** wrap the same `.desktop` with this tool and a per-app `*-managed` installer (Brave/Signal/Telegram/Proton topics). `add` refuses nested wrappers.
 
 ## How it works
 
@@ -83,10 +85,10 @@ app-scale remove --id ID --purge-config   # one app; GNOME falls back to the ven
 
 This rewrites **user** launchers only (`~/.local/share/applications/`). It does not change Mutter, GDM, or system `.desktop` files in place.
 
-- **Platform:** Chromium/Electron and Qt. GTK and Flatpak are refused with an error.
+- **Platform:** Chromium/Electron and Qt via snap or `.deb` `.desktop` files. GTK and Flatpak are refused with an error.
 - **Kill-switch:** `app-scale remove --id ID` or delete the local `.desktop`; the vendor entry returns.
 - **Defaults:** no apps wrapped; no ozone/X11 flags; no guessed scale.
-- **Tradeoffs:** a terminal command on `PATH` bypasses the wrapper unless you call `app-scale-managed`. Nested `*-managed` wrappers are refused.
+- **Tradeoffs:** a terminal command on `PATH` bypasses the wrapper unless you call `app-scale-managed`. Nested `*-managed` wrappers are refused. This release does **not** replace host-specific Brave PWA / Telegram / Signal / Proton installers.
 - This GitHub repo is the release source for tagged releases and public docs — see [CONTRIBUTING.md](CONTRIBUTING.md)
 
 ## License

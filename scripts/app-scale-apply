@@ -115,6 +115,9 @@ def process_desktop(
             new_lines.append(line)
             continue
         if stripped.startswith("Exec="):
+            if not in_desktop_entry:
+                new_lines.append(line)
+                continue
             eol = "\n"
             if line.endswith("\r\n"):
                 eol = "\r\n"
