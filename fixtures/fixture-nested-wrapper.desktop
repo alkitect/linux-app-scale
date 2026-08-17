@@ -1,0 +1,4 @@
+[Desktop Entry]
+Name=Fixture Nested Wrapper
+Exec=/usr/local/bin/signal-managed /usr/bin/true %U
+Type=Application

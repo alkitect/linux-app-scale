@@ -59,6 +59,35 @@ if app-scale add --desktop "${work}/fixture-chromium.desktop" --toolkit gtk --id
 fi
 ok "gtk refused"
 
+cp "${ROOT}/fixtures/fixture-flatpak.desktop" "${work}/fixture-flatpak.desktop"
+if app-scale add --desktop "${work}/fixture-flatpak.desktop" --toolkit chromium --id should-fail-fp --scale 1.25 2>/dev/null; then
+  fail "flatpak Exec should be refused"
+fi
+ok "flatpak refused"
+
+cp "${ROOT}/fixtures/fixture-nested-wrapper.desktop" "${work}/fixture-nested-wrapper.desktop"
+if app-scale add --desktop "${work}/fixture-nested-wrapper.desktop" --toolkit chromium --id should-fail-wrap --scale 1.25 2>/dev/null; then
+  fail "nested *-managed Exec should be refused"
+fi
+ok "nested wrapper refused"
+
+if app-scale add --desktop "${work}/fixture-chromium.desktop" --toolkit chromium --id missing-scale 2>/dev/null; then
+  fail "add without --scale should exit 2"
+fi
+ok "missing scale refused"
+
+cp "${ROOT}/fixtures/fixture-actions.desktop" "${work}/fixture-actions.desktop"
+app-scale add --desktop "${work}/fixture-actions.desktop" --toolkit chromium --id fixture-actions --scale 1.25
+local_a="${apps}/fixture-actions.desktop"
+grep -q "app-scale-managed fixture-actions /usr/bin/true %U" "$local_a" || fail "Desktop Entry Exec not wrapped"
+if grep -A2 '\[Desktop Action new-window\]' "$local_a" | grep -q "app-scale-managed"; then
+  fail "Desktop Action Exec should not be wrapped"
+fi
+ok "Desktop Action Exec skipped"
+
+app-scale remove --id fixture-actions --purge-config
+[[ ! -f "$local_a" ]] || fail "actions local desktop still present"
+
 app-scale remove --id fixture-chromium --purge-config
 app-scale remove --id fixture-qt --purge-config
 [[ ! -f "$local_c" ]] || fail "chromium local desktop still present"

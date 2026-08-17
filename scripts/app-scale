@@ -180,8 +180,16 @@ cmd_add() {
   esac
 
   mkdir -p "$(app_scale_profiles_dir)" "$apps"
-  local profile
+  local profile other
   profile="$(app_scale_profile_path "$id")"
+  for other in "$(app_scale_profiles_dir)"/*.conf; do
+    [[ -f "$other" ]] || continue
+    [[ "$(basename "$other" .conf)" == "$id" ]] && continue
+    if [[ "$(app_scale_get_kv "$other" LOCAL_DESKTOP "")" == "$local_desktop" ]]; then
+      msg_err "LOCAL_DESKTOP already owned by profile $(app_scale_get_kv "$other" ID "$(basename "$other" .conf)"). remove that id first."
+      exit 2
+    fi
+  done
   cat > "$profile" <<EOF
 ID=${id}
 TOOLKIT=${toolkit}

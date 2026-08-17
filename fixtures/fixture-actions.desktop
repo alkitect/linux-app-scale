@@ -1,0 +1,9 @@
+[Desktop Entry]
+Name=Fixture Actions
+Exec=/usr/bin/true %U
+Type=Application
+Actions=new-window;
+
+[Desktop Action new-window]
+Name=New Window
+Exec=/usr/bin/true --new-window %U

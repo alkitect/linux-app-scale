@@ -47,7 +47,19 @@ app-scale-managed <id> <absolute-binary> [args...]
 - `qt`: `env QT_SCALE_FACTOR=… QT_AUTO_SCREEN_SCALE_FACTOR=0 QT_SCREEN_SCALE_FACTORS=` plus `EXTRA_ENV`.
 - Field codes (`%U`, `%u`, `%F`, `%f`) stay on `Exec=` because apply only substitutes the binary path.
 
-Nested `*-managed` wrappers and `flatpak` in `Exec=` are refused at `add`.
+Nested `*-managed` wrappers and `flatpak` in `Exec=` are refused at `add`. Two profiles may not share the same `LOCAL_DESKTOP`.
+
+## Exec parse / transform / satisfied
+
+`add` reads only the first `Exec=` under `[Desktop Entry]`:
+
+1. Refuse if the body contains `flatpak` or `*-managed `.
+2. Take `--binary` if given; else the first absolute path that is not a `.desktop` and not `KEY=value`; else `command -v` on the first non-flag token.
+3. Preserve trailing field codes (`%U` / `%u` / `%F` / `%f`) by never rewriting them — apply substitutes only the binary substring.
+
+`already_wrapped` is true iff `app-scale-managed <ID> <BINARY>` appears (space or tab). Transform replaces the first `BINARY` occurrence with `wrapper ID BINARY`. Only `[Desktop Entry]` `Exec=` lines are rewritten; `[Desktop Action *]` is left alone.
+
+Vendor refresh copies first when the vendor file is newer, then wrap. Wrapper exit 2 if both profile `SCALE` and global `DEVICE_SCALE_FACTOR` are empty (no 1.25 default).
 
 ## Reconciler
 

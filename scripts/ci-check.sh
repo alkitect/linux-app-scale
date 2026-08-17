@@ -89,6 +89,16 @@ if grep -qE '^[[:space:]]*DEVICE_SCALE_FACTOR=' "${tmp}/.config/linux-app-scale/
   echo "ci-check: seeded user config assigned DEVICE_SCALE_FACTOR" >&2
   exit 1
 fi
+shopt -s nullglob
+seeded_profiles=("${tmp}/.config/linux-app-scale/profiles"/*.conf)
+shopt -u nullglob
+if [[ ${#seeded_profiles[@]} -gt 0 ]]; then
+  echo "ci-check: install must not seed profiles" >&2
+  exit 1
+fi
+test -f "${tmp}/.config/systemd/user/app-scale-apply.service"
+test -f "${tmp}/.config/systemd/user/app-scale-apply.path"
+test -f "${tmp}/.config/systemd/user/app-scale-apply.timer"
 
 APP_SCALE_ROOT="${ROOT}" "${tmp}/.local/bin/verify-linux-app-scale"
 
@@ -98,6 +108,9 @@ test ! -e "${tmp}/.local/bin/app-scale-managed"
 test ! -e "${tmp}/.local/bin/app-scale-apply"
 test ! -e "${tmp}/.local/bin/verify-linux-app-scale"
 test ! -e "${tmp}/.local/bin/linux-app-scale-lib"
+test ! -e "${tmp}/.config/systemd/user/app-scale-apply.service"
+test ! -e "${tmp}/.config/systemd/user/app-scale-apply.path"
+test ! -e "${tmp}/.config/systemd/user/app-scale-apply.timer"
 test -f "${tmp}/.config/linux-app-scale/config"
 
 # Versioning gate (alkitect public extracts)

@@ -2,6 +2,14 @@
 
 ## Unreleased
 
+## 0.1.1 — 2026-08-17
+
+- Reconciler wraps only `[Desktop Entry]` `Exec=` (skip Desktop Actions).
+- `add` refuses a second profile on the same `LOCAL_DESKTOP`.
+- Verify: Flatpak, nested `*-managed`, missing `--scale`, Desktop Action skip.
+- Examples index; README: relaunch from Activities; do not stack with per-app wrappers.
+- CI: `ci-check.sh` only; assert no seeded profiles; uninstall removes user units.
+
 ## 0.1.0 — 2026-08-17
 
 - Initial public extract: generic profile toolkit (`app-scale` / `app-scale-managed` / `app-scale-apply`).
