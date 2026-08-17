@@ -1,0 +1,13 @@
+# Example only — copy and edit. Not installed by default.
+# Qt + X11/xcb if the app ignores compositor scale. See docs/PLATFORM.md § Qt.
+
+ID=example-qt-xcb
+TOOLKIT=qt
+BINARY=/usr/bin/true
+VENDOR_DESKTOP=
+LOCAL_DESKTOP=
+SCALE=1.25
+EXTRA_FLAGS=
+EXTRA_ENV=GDK_BACKEND=x11 QT_QPA_PLATFORM=xcb
+REFRESH_FROM_VENDOR=0
+SOURCE=file

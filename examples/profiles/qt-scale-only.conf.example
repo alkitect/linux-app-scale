@@ -1,0 +1,13 @@
+# Example only — copy and edit. Not installed by default.
+# Qt scale only (Telegram-class). Try this before xcb extras.
+
+ID=example-qt
+TOOLKIT=qt
+BINARY=/usr/bin/true
+VENDOR_DESKTOP=
+LOCAL_DESKTOP=
+SCALE=1.25
+EXTRA_FLAGS=
+EXTRA_ENV=
+REFRESH_FROM_VENDOR=0
+SOURCE=file

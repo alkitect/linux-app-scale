@@ -1,0 +1,10 @@
+[Unit]
+Description=Reconcile linux-app-scale .desktop launchers (app-scale-apply)
+After=default.target
+StartLimitIntervalSec=10
+StartLimitBurst=3
+
+[Service]
+Type=oneshot
+ExecStartPre=/bin/sleep 1
+ExecStart=%h/.local/bin/app-scale-apply --quiet

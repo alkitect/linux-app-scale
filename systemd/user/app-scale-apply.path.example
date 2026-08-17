@@ -1,0 +1,11 @@
+[Unit]
+Description=Watch vendor .desktop dirs for linux-app-scale reconcile
+
+[Path]
+# Vendor dirs only — do not watch ~/.local/share/applications (apply writes there).
+PathChanged=/var/lib/snapd/desktop/applications
+PathChanged=/usr/share/applications
+Unit=app-scale-apply.service
+
+[Install]
+WantedBy=default.target

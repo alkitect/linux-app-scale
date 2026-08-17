@@ -1,0 +1,265 @@
+#!/usr/bin/env python3
+"""Reconcile local .desktop files for linux-app-scale profiles."""
+
+from __future__ import annotations
+
+import argparse
+import os
+import shutil
+import subprocess
+import sys
+import tempfile
+from pathlib import Path
+
+MARKER_KEY = "X-LinuxAppScale"
+
+
+def load_kv(path: Path) -> dict[str, str]:
+    out: dict[str, str] = {}
+    if not path.is_file():
+        return out
+    for raw in path.read_text(encoding="utf-8", errors="replace").splitlines():
+        line = raw.strip()
+        if not line or line.startswith("#") or "=" not in line:
+            continue
+        k, v = line.split("=", 1)
+        k, v = k.strip(), v.strip()
+        if k.startswith("#"):
+            continue
+        if "#" in v and not (v.startswith('"') and v.count('"') >= 2):
+            v = v.split("#", 1)[0].strip()
+        if (v.startswith('"') and v.endswith('"')) or (v.startswith("'") and v.endswith("'")):
+            v = v[1:-1]
+        out[k] = v
+    return out
+
+
+def config_dir() -> Path:
+    return Path(os.environ.get("XDG_CONFIG_HOME", Path.home() / ".config")) / "linux-app-scale"
+
+
+def applications_dir() -> Path:
+    data = os.environ.get("XDG_DATA_HOME", str(Path.home() / ".local" / "share"))
+    return Path(data) / "applications"
+
+
+def wrapper_path(global_cfg: dict[str, str]) -> Path:
+    p = global_cfg.get("APP_SCALE_MANAGED_PATH", "").strip()
+    if p:
+        return Path(p).expanduser()
+    return Path.home() / ".local" / "bin" / "app-scale-managed"
+
+
+def profile_files() -> list[Path]:
+    d = config_dir() / "profiles"
+    if not d.is_dir():
+        return []
+    return sorted(d.glob("*.conf"))
+
+
+def already_wrapped(body: str, wrapper: Path, profile_id: str, binary: str) -> bool:
+    needle = f"{wrapper} {profile_id} {binary}"
+    return needle in body or f"{wrapper}\t{profile_id}\t{binary}" in body
+
+
+def transform_exec(body: str, wrapper: Path, profile_id: str, binary: str) -> str:
+    if binary not in body:
+        return body
+    if already_wrapped(body, wrapper, profile_id, binary):
+        return body
+    return body.replace(binary, f"{wrapper} {profile_id} {binary}", 1)
+
+
+def atomic_write(path: Path, content: str) -> None:
+    path.parent.mkdir(parents=True, exist_ok=True)
+    fd, tmp = tempfile.mkstemp(prefix=".tmp-app-scale-", suffix=".desktop", dir=str(path.parent))
+    try:
+        with os.fdopen(fd, "w", encoding="utf-8", newline="") as fh:
+            fh.write(content)
+        os.replace(tmp, path)
+    except Exception:
+        try:
+            os.unlink(tmp)
+        except OSError:
+            pass
+        raise
+
+
+def process_desktop(
+    path: Path,
+    wrapper: Path,
+    profile_id: str,
+    binary: str,
+    dry_run: bool,
+    quiet: bool,
+) -> bool:
+    if not path.is_file():
+        return False
+    text = path.read_text(encoding="utf-8", errors="replace")
+    lines = text.splitlines(keepends=True)
+    if not lines:
+        return False
+
+    changed = False
+    new_lines: list[str] = []
+    marker_seen = False
+    in_desktop_entry = False
+    desktop_header = -1
+
+    for i, line in enumerate(lines):
+        stripped = line.rstrip("\r\n")
+        if stripped.startswith("[") and stripped.endswith("]"):
+            in_desktop_entry = stripped.strip() == "[Desktop Entry]"
+            if in_desktop_entry and desktop_header < 0:
+                desktop_header = i
+            new_lines.append(line)
+            continue
+        if stripped.startswith("Exec="):
+            eol = "\n"
+            if line.endswith("\r\n"):
+                eol = "\r\n"
+            elif line.endswith("\n"):
+                eol = "\n"
+            else:
+                eol = ""
+            body = stripped[len("Exec=") :]
+            new_body = transform_exec(body, wrapper, profile_id, binary)
+            if new_body != body:
+                changed = True
+                new_lines.append("Exec=" + new_body + eol)
+            else:
+                new_lines.append(line)
+            continue
+        if stripped.startswith(f"{MARKER_KEY}="):
+            marker_seen = True
+            expected = f"{MARKER_KEY}={profile_id}"
+            if stripped != expected:
+                eol = "\r\n" if line.endswith("\r\n") else ("\n" if line.endswith("\n") else "")
+                new_lines.append(expected + eol)
+                changed = True
+            else:
+                new_lines.append(line)
+            continue
+        new_lines.append(line)
+
+    if not marker_seen:
+        eol = "\n"
+        if lines[0].endswith("\r\n"):
+            eol = "\r\n"
+        insert_at = desktop_header + 1 if desktop_header >= 0 else 0
+        new_lines.insert(insert_at, f"{MARKER_KEY}={profile_id}{eol}")
+        changed = True
+
+    if not changed:
+        return False
+    if dry_run:
+        if not quiet:
+            print(f"would update: {path}")
+        return True
+    bak = path.with_suffix(path.suffix + f".bak.{os.getpid()}")
+    shutil.copy2(path, bak)
+    atomic_write(path, "".join(new_lines))
+    if not quiet:
+        print(f"updated: {path} (backup {bak})")
+    return True
+
+
+def maybe_refresh(cfg: dict[str, str], local: Path, dry_run: bool, quiet: bool) -> None:
+    flag = cfg.get("REFRESH_FROM_VENDOR", "1").strip().lower()
+    if flag not in ("1", "true", "yes"):
+        return
+    vendor = Path(cfg.get("VENDOR_DESKTOP", "").strip()).expanduser()
+    if not vendor.is_file():
+        return
+    if local.is_file() and not (vendor.stat().st_mtime > local.stat().st_mtime):
+        return
+    if dry_run:
+        if not quiet:
+            print(f"refresh: would copy {vendor} -> {local}")
+        return
+    local.parent.mkdir(parents=True, exist_ok=True)
+    shutil.copy2(vendor, local)
+    if not quiet:
+        print(f"refresh: copied vendor -> {local}")
+
+
+def apply_one(
+    profile_path: Path,
+    global_cfg: dict[str, str],
+    wrapper: Path,
+    dry_run: bool,
+    quiet: bool,
+) -> bool:
+    cfg = load_kv(profile_path)
+    profile_id = cfg.get("ID", profile_path.stem).strip()
+    binary = cfg.get("BINARY", "").strip()
+    toolkit = cfg.get("TOOLKIT", "").strip().lower()
+    if toolkit in ("gtk",):
+        print(f"skip {profile_id}: TOOLKIT=gtk is not supported", file=sys.stderr)
+        return False
+    if toolkit not in ("chromium", "qt"):
+        print(f"skip {profile_id}: TOOLKIT must be chromium or qt", file=sys.stderr)
+        return False
+    if not binary:
+        print(f"skip {profile_id}: BINARY missing", file=sys.stderr)
+        return False
+    local_raw = cfg.get("LOCAL_DESKTOP", "").strip()
+    local = Path(local_raw).expanduser() if local_raw else applications_dir() / Path(cfg.get("VENDOR_DESKTOP", "app.desktop")).name
+    maybe_refresh(cfg, local, dry_run, quiet)
+    if not local.is_file() and not dry_run:
+        vendor = Path(cfg.get("VENDOR_DESKTOP", "").strip()).expanduser()
+        if vendor.is_file():
+            local.parent.mkdir(parents=True, exist_ok=True)
+            shutil.copy2(vendor, local)
+            if not quiet:
+                print(f"refresh: copied vendor -> {local}")
+    return process_desktop(local, wrapper, profile_id, binary, dry_run, quiet)
+
+
+def main() -> int:
+    ap = argparse.ArgumentParser(description="Reconcile linux-app-scale .desktop launchers.")
+    ap.add_argument("--dry-run", action="store_true")
+    ap.add_argument("--check", action="store_true", help="Exit 1 if any file would change")
+    ap.add_argument("--quiet", action="store_true")
+    ap.add_argument("--id", default="", help="Apply one profile id")
+    args = ap.parse_args()
+
+    global_cfg = load_kv(config_dir() / "config")
+    wrapper = wrapper_path(global_cfg)
+    dry = args.dry_run or args.check
+    if not dry and not wrapper.is_file():
+        print(f"wrapper not found: {wrapper} (run install-to-local.sh first)", file=sys.stderr)
+        return 3
+
+    files = profile_files()
+    if args.id:
+        files = [p for p in files if p.stem == args.id]
+        if not files:
+            print(f"no profile: {args.id}", file=sys.stderr)
+            return 2
+
+    would = False
+    for p in files:
+        try:
+            if apply_one(p, global_cfg, wrapper, dry_run=dry, quiet=args.quiet):
+                would = True
+        except OSError as exc:
+            print(f"error processing {p}: {exc}", file=sys.stderr)
+            return 1
+
+    if would and not dry and shutil.which("update-desktop-database"):
+        apps = applications_dir()
+        subprocess.run(
+            ["update-desktop-database", str(apps)],
+            check=False,
+            stdout=subprocess.DEVNULL,
+            stderr=subprocess.DEVNULL,
+        )
+
+    if args.check and would:
+        return 1
+    return 0
+
+
+if __name__ == "__main__":
+    raise SystemExit(main())

@@ -1,0 +1,100 @@
+#!/usr/bin/env bash
+# app-scale-managed — launch a real binary with per-profile scale flags or Qt env.
+# Usage: app-scale-managed <profile-id> <absolute-binary> [args...]
+set -euo pipefail
+
+_here="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+if [[ -f "${_here}/linux-app-scale-lib/common.sh" ]]; then
+  # shellcheck source=/dev/null
+  . "${_here}/linux-app-scale-lib/common.sh"
+elif [[ -f "${_here}/lib/common.sh" ]]; then
+  # shellcheck source=/dev/null
+  . "${_here}/lib/common.sh"
+else
+  echo "app-scale-managed: cannot find common.sh" >&2
+  exit 3
+fi
+
+if [[ "${1:-}" == "" || "${2:-}" == "" ]]; then
+  echo "Usage: app-scale-managed <profile-id> <absolute-binary> [args...]" >&2
+  exit 2
+fi
+
+profile_id="$1"
+real_bin="$2"
+shift 2
+
+if [[ "${real_bin:0:1}" != "/" ]]; then
+  echo "app-scale-managed: binary must be an absolute path" >&2
+  exit 2
+fi
+
+profile="$(app_scale_profile_path "$profile_id")"
+if [[ ! -f "$profile" ]]; then
+  echo "app-scale-managed: missing profile ${profile}" >&2
+  exit 3
+fi
+
+toolkit="$(app_scale_get_kv "$profile" TOOLKIT "")"
+scale="$(app_scale_resolve_scale "$profile")"
+if [[ -z "$scale" ]]; then
+  echo "app-scale-managed: set SCALE in the profile or DEVICE_SCALE_FACTOR in global config" >&2
+  exit 2
+fi
+
+extra_flags="$(app_scale_get_kv "$profile" EXTRA_FLAGS "")"
+extra_env="$(app_scale_get_kv "$profile" EXTRA_ENV "")"
+
+case "$toolkit" in
+  chromium)
+    declare -a forwarded=()
+    for a in "$@"; do
+      [[ "$a" == --force-device-scale-factor=* ]] && continue
+      forwarded+=("$a")
+    done
+    declare -a managed=(--force-device-scale-factor="${scale}")
+    if [[ -n "${extra_flags// }" ]]; then
+      # shellcheck disable=SC2206
+      extra_arr=($extra_flags)
+      for flag in "${extra_arr[@]}"; do
+        skip=0
+        for a in "${forwarded[@]}"; do
+          [[ "$a" == "$flag" ]] && skip=1 && break
+        done
+        [[ "$skip" -eq 0 ]] && managed+=("$flag")
+      done
+    fi
+    exec "$real_bin" "${managed[@]}" "${forwarded[@]}"
+    ;;
+  qt)
+    declare -a managed=(
+      "QT_SCALE_FACTOR=${scale}"
+      "QT_AUTO_SCREEN_SCALE_FACTOR=0"
+      "QT_SCREEN_SCALE_FACTORS="
+    )
+    if [[ -n "${extra_env// }" ]]; then
+      # shellcheck disable=SC2206
+      extra_arr=($extra_env)
+      managed+=("${extra_arr[@]}")
+    fi
+    declare -a forwarded=()
+    for a in "$@"; do
+      skip=0
+      case "$a" in
+        QT_SCALE_FACTOR=*|QT_AUTO_SCREEN_SCALE_FACTOR=*|QT_SCREEN_SCALE_FACTORS=*)
+          skip=1
+          ;;
+      esac
+      [[ "$skip" -eq 0 ]] && forwarded+=("$a")
+    done
+    exec env "${managed[@]}" "$real_bin" "${forwarded[@]}"
+    ;;
+  gtk)
+    echo "app-scale-managed: TOOLKIT=gtk is not supported in this release (see README Limits)" >&2
+    exit 2
+    ;;
+  *)
+    echo "app-scale-managed: unknown TOOLKIT=${toolkit} (use chromium or qt)" >&2
+    exit 2
+    ;;
+esac

@@ -1,0 +1,287 @@
+#!/usr/bin/env bash
+# app-scale — add / list / show / apply / remove per-app HiDPI launcher profiles.
+set -euo pipefail
+
+_here="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+if [[ -f "${_here}/linux-app-scale-lib/common.sh" ]]; then
+  # shellcheck source=/dev/null
+  . "${_here}/linux-app-scale-lib/common.sh"
+elif [[ -f "${_here}/lib/common.sh" ]]; then
+  # shellcheck source=/dev/null
+  . "${_here}/lib/common.sh"
+else
+  echo "app-scale: cannot find common.sh" >&2
+  exit 3
+fi
+
+APPLY_BIN="${_here}/app-scale-apply"
+if [[ ! -x "$APPLY_BIN" ]]; then
+  APPLY_BIN="$(command -v app-scale-apply || true)"
+fi
+
+usage() {
+  cat >&2 <<EOF
+Usage:
+  app-scale add --desktop PATH --toolkit chromium|qt [--id ID] [--scale N] [--binary PATH]
+  app-scale list
+  app-scale show --id ID
+  app-scale apply [--id ID] [--dry-run] [--check] [--quiet]
+  app-scale remove --id ID [--purge-config]
+EOF
+}
+
+msg_err() { printf '%s\n' "$*" >&2; }
+
+desktop_exec_body() {
+  local path="$1"
+  local in_entry=0 line
+  while IFS= read -r line || [[ -n "$line" ]]; do
+    case "$line" in
+      "[Desktop Entry]") in_entry=1; continue ;;
+      \[*\]) in_entry=0; continue ;;
+    esac
+    if [[ "$in_entry" -eq 1 && "$line" == Exec=* ]]; then
+      printf '%s' "${line#Exec=}"
+      return 0
+    fi
+  done < "$path"
+  return 1
+}
+
+extract_binary() {
+  local body="$1" override="${2:-}"
+  if [[ -n "$override" ]]; then
+    printf '%s' "$override"
+    return 0
+  fi
+  local tok cand=""
+  # shellcheck disable=SC2086
+  for tok in $body; do
+    tok="${tok%\"}"
+    tok="${tok#\"}"
+    [[ "$tok" == /* ]] || continue
+    [[ "$tok" == *.desktop ]] && continue
+    [[ "$tok" == *=* ]] && continue
+    cand="$tok"
+    if [[ -x "$tok" ]]; then
+      printf '%s' "$tok"
+      return 0
+    fi
+  done
+  if [[ -n "$cand" ]]; then
+    printf '%s' "$cand"
+    return 0
+  fi
+  # First non-flag token, resolve via command -v
+  for tok in $body; do
+    tok="${tok%\"}"
+    tok="${tok#\"}"
+    [[ "$tok" == -* ]] && continue
+    [[ "$tok" == *=* ]] && continue
+    [[ "$tok" == %* ]] && continue
+    [[ "$tok" == env ]] && continue
+    local resolved
+    resolved="$(command -v "$tok" 2>/dev/null || true)"
+    if [[ -n "$resolved" && "$resolved" == /* ]]; then
+      printf '%s' "$resolved"
+      return 0
+    fi
+  done
+  return 1
+}
+
+guess_source() {
+  local vendor="$1"
+  case "$vendor" in
+    /var/lib/snapd/desktop/applications/*) printf '%s' snap ;;
+    /usr/share/applications/*) printf '%s' deb ;;
+    *) printf '%s' file ;;
+  esac
+}
+
+cmd_add() {
+  local desktop="" toolkit="" id="" scale="" binary=""
+  while [[ $# -gt 0 ]]; do
+    case "$1" in
+      --desktop) shift; desktop="${1:?}" ;;
+      --toolkit) shift; toolkit="${1:?}" ;;
+      --id) shift; id="${1:?}" ;;
+      --scale) shift; scale="${1:?}" ;;
+      --binary) shift; binary="${1:?}" ;;
+      -h|--help) usage; exit 0 ;;
+      *) msg_err "Unknown option: $1"; usage; exit 2 ;;
+    esac
+    shift
+  done
+  [[ -n "$desktop" ]] || { msg_err "add requires --desktop"; exit 2; }
+  [[ -n "$toolkit" ]] || { msg_err "add requires --toolkit chromium|qt"; exit 2; }
+  toolkit="$(printf '%s' "$toolkit" | tr '[:upper:]' '[:lower:]')"
+  case "$toolkit" in
+    chromium|qt) ;;
+    gtk)
+      msg_err "TOOLKIT=gtk is not supported in this release. See README Limits."
+      exit 2
+      ;;
+    *)
+      msg_err "TOOLKIT must be chromium or qt"
+      exit 2
+      ;;
+  esac
+  [[ -f "$desktop" ]] || { msg_err "desktop not found: $desktop"; exit 2; }
+  desktop="$(readlink -f "$desktop")"
+
+  local body
+  body="$(desktop_exec_body "$desktop")" || { msg_err "no Exec= in [Desktop Entry]: $desktop"; exit 2; }
+  if [[ "$body" == *flatpak* ]]; then
+    msg_err "Flatpak launchers are not supported in this release. See README Limits."
+    exit 2
+  fi
+  if [[ "$body" == *"-managed "* ]] || [[ "$body" == *"app-scale-managed "* ]]; then
+    msg_err "Exec= already uses a managed wrapper. Remove that wrapper first, then retry."
+    exit 2
+  fi
+
+  binary="$(extract_binary "$body" "$binary")" || {
+    msg_err "could not find an absolute binary in Exec=. Pass --binary /path/to/app"
+    exit 2
+  }
+  if [[ "${binary:0:1}" != "/" ]]; then
+    msg_err "binary must be absolute: $binary"
+    exit 2
+  fi
+
+  if [[ -z "$id" ]]; then
+    id="$(app_scale_id_from_desktop "$desktop")" || {
+      msg_err "could not derive --id from desktop name; pass --id"
+      exit 2
+    }
+  else
+    id="$(app_scale_sanitize_id "$id")" || { msg_err "invalid --id"; exit 2; }
+  fi
+
+  if [[ -z "$scale" ]]; then
+    scale="$(app_scale_get_kv "$(app_scale_global_config)" DEVICE_SCALE_FACTOR "")"
+  fi
+  if [[ -z "$scale" ]]; then
+    msg_err "scale is required: pass --scale 1.25 (or 1.5, 2.0) or set DEVICE_SCALE_FACTOR in $(app_scale_global_config)"
+    exit 2
+  fi
+
+  local apps local_desktop vendor source refresh
+  apps="$(app_scale_applications_dir)"
+  local_desktop="${apps}/$(basename "$desktop")"
+  vendor="$desktop"
+  source="$(guess_source "$vendor")"
+  refresh=1
+  case "$desktop" in
+    "${apps}"/*)
+      refresh=0
+      ;;
+  esac
+
+  mkdir -p "$(app_scale_profiles_dir)" "$apps"
+  local profile
+  profile="$(app_scale_profile_path "$id")"
+  cat > "$profile" <<EOF
+ID=${id}
+TOOLKIT=${toolkit}
+BINARY=${binary}
+VENDOR_DESKTOP=${vendor}
+LOCAL_DESKTOP=${local_desktop}
+SCALE=${scale}
+EXTRA_FLAGS=
+EXTRA_ENV=
+REFRESH_FROM_VENDOR=${refresh}
+SOURCE=${source}
+EOF
+
+  if [[ "$desktop" != "$local_desktop" ]]; then
+    cp -a "$desktop" "$local_desktop"
+  fi
+
+  echo "Wrote ${profile}"
+  if [[ -x "$APPLY_BIN" ]]; then
+    "$APPLY_BIN" --id "$id"
+  else
+    msg_err "app-scale-apply not found; run install-to-local.sh then: app-scale apply --id ${id}"
+    exit 3
+  fi
+}
+
+cmd_list() {
+  local d p
+  d="$(app_scale_profiles_dir)"
+  [[ -d "$d" ]] || return 0
+  for p in "$d"/*.conf; do
+    [[ -f "$p" ]] || continue
+    printf '%s\t%s\t%s\n' \
+      "$(app_scale_get_kv "$p" ID "$(basename "$p" .conf)")" \
+      "$(app_scale_get_kv "$p" TOOLKIT "")" \
+      "$(app_scale_get_kv "$p" BINARY "")"
+  done
+}
+
+cmd_show() {
+  local id=""
+  while [[ $# -gt 0 ]]; do
+    case "$1" in
+      --id) shift; id="${1:?}" ;;
+      *) msg_err "Unknown option: $1"; exit 2 ;;
+    esac
+    shift
+  done
+  [[ -n "$id" ]] || { msg_err "show requires --id"; exit 2; }
+  local profile
+  profile="$(app_scale_profile_path "$id")"
+  [[ -f "$profile" ]] || { msg_err "no profile: $id"; exit 2; }
+  cat "$profile"
+}
+
+cmd_apply() {
+  [[ -x "$APPLY_BIN" ]] || { msg_err "app-scale-apply not found"; exit 3; }
+  exec "$APPLY_BIN" "$@"
+}
+
+cmd_remove() {
+  local id="" purge=0
+  while [[ $# -gt 0 ]]; do
+    case "$1" in
+      --id) shift; id="${1:?}" ;;
+      --purge-config) purge=1 ;;
+      *) msg_err "Unknown option: $1"; exit 2 ;;
+    esac
+    shift
+  done
+  [[ -n "$id" ]] || { msg_err "remove requires --id"; exit 2; }
+  local profile local_desktop
+  profile="$(app_scale_profile_path "$id")"
+  [[ -f "$profile" ]] || { msg_err "no profile: $id"; exit 2; }
+  local_desktop="$(app_scale_get_kv "$profile" LOCAL_DESKTOP "")"
+  if [[ -n "$local_desktop" && -f "$local_desktop" ]]; then
+    if grep -q "^X-LinuxAppScale=${id}\$" "$local_desktop" 2>/dev/null \
+      || grep -q "app-scale-managed ${id} " "$local_desktop" 2>/dev/null; then
+      rm -f "$local_desktop"
+      echo "Removed ${local_desktop}"
+    else
+      echo "Left ${local_desktop} (not marked as this profile)"
+    fi
+  fi
+  if [[ "$purge" -eq 1 ]]; then
+    rm -f "$profile"
+    echo "Removed ${profile}"
+  else
+    echo "Kept ${profile} (pass --purge-config to delete it)"
+  fi
+}
+
+cmd="${1:-}"
+shift || true
+case "$cmd" in
+  add) cmd_add "$@" ;;
+  list) cmd_list "$@" ;;
+  show) cmd_show "$@" ;;
+  apply) cmd_apply "$@" ;;
+  remove) cmd_remove "$@" ;;
+  -h|--help|"") usage; [[ -n "$cmd" ]] || exit 2; exit 0 ;;
+  *) msg_err "Unknown command: $cmd"; usage; exit 2 ;;
+esac
