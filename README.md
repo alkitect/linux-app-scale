@@ -2,7 +2,7 @@
 
 Per-app HiDPI scale for Linux launchers that survives snap and deb desktop refreshes.
 
-[![ko-fi](https://ko-fi.com/img/githubbutton_sm.svg)](https://ko-fi.com/alkitect)
+[![ko-fi](https://ko-fi.com/img/githubbutton_sm.svg)](https://ko-fi.com/alkitect/?hidefeed=true&widget=true&embed=true)
 
 ## What this does
 
@@ -95,4 +95,4 @@ This rewrites **user** launchers only (`~/.local/share/applications/`). It does 
 
 MIT — see [LICENSE](LICENSE).
 
-Optional tip jar: [ko-fi.com/alkitect](https://ko-fi.com/alkitect)
+Optional tip jar: [ko-fi.com/alkitect](https://ko-fi.com/alkitect/?hidefeed=true&widget=true&embed=true)
