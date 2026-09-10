@@ -2,7 +2,6 @@
 
 Per-app HiDPI scale for Linux launchers that survives snap and deb desktop refreshes.
 
-[![ko-fi](https://ko-fi.com/img/githubbutton_sm.svg)](https://ko-fi.com/alkitect/?hidefeed=true&widget=true&embed=true)
 
 ## What this does
 
@@ -51,6 +50,12 @@ app-scale apply --dry-run
 - If scale is wrong: `app-scale show --id ID`, edit `SCALE=`, then `app-scale apply --id ID`.
 
 Maintainers: `./scripts/ci-check.sh`.
+
+## Support my work
+
+Tip jar for the next desktop fix. Or a coffee so the next script stays boring on purpose.
+
+[![ko-fi](https://ko-fi.com/img/githubbutton_sm.svg)](https://ko-fi.com/alkitect/?hidefeed=true&widget=true&embed=true)
 
 ## Uninstall
 
