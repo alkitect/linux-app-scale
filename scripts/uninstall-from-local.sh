@@ -25,10 +25,12 @@ for arg in "$@"; do
   esac
 done
 
-if command -v systemctl >/dev/null 2>&1; then
+if [[ -z "${ALKITECT_CI_TMP:-}" ]] && command -v systemctl >/dev/null 2>&1; then
   systemctl --user disable --now app-scale-apply.path 2>/dev/null || true
   systemctl --user disable --now app-scale-apply.timer 2>/dev/null || true
   systemctl --user daemon-reload 2>/dev/null || true
+elif [[ -n "${ALKITECT_CI_TMP:-}" ]]; then
+  echo "ALKITECT_CI_TMP=1: skipped systemctl disable"
 fi
 
 rm -f "${SYSTEMD_USER}/app-scale-apply.service"

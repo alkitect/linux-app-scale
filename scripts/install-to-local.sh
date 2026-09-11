@@ -45,8 +45,10 @@ for unit in service timer path; do
   echo "Installed systemd user unit: ${dest}"
 done
 
-if command -v systemctl >/dev/null 2>&1; then
+if [[ -z "${ALKITECT_CI_TMP:-}" ]] && command -v systemctl >/dev/null 2>&1; then
   systemctl --user daemon-reload 2>/dev/null || true
+elif [[ -n "${ALKITECT_CI_TMP:-}" ]]; then
+  echo "ALKITECT_CI_TMP=1: skipped systemctl (unit files under tmp HOME only)"
 fi
 
 echo ""
@@ -63,6 +65,10 @@ echo "  systemctl --user enable --now app-scale-apply.path"
 echo "  systemctl --user enable --now app-scale-apply.timer"
 
 if [[ "${ENABLE_AUTOMATION}" -eq 1 ]]; then
+  if [[ -n "${ALKITECT_CI_TMP:-}" ]]; then
+    echo "ALKITECT_CI_TMP=1: refusing --enable-automation (would touch live systemctl)" >&2
+    exit 1
+  fi
   echo ""
   echo "Enabling automation (--enable-automation)..."
   systemctl --user enable --now app-scale-apply.path

@@ -76,7 +76,24 @@ export HOME="${tmp}"
 export XDG_CONFIG_HOME="${tmp}/.config"
 export XDG_DATA_HOME="${tmp}/.local/share"
 export XDG_STATE_HOME="${tmp}/.local/state"
+export XDG_RUNTIME_DIR="${tmp}/run"
+mkdir -p "${XDG_CONFIG_HOME}" "${XDG_DATA_HOME}" "${XDG_STATE_HOME}" "${XDG_RUNTIME_DIR}"
+chmod 700 "${XDG_RUNTIME_DIR}"
+export ALKITECT_CI_TMP=1
 export PATH="${tmp}/.local/bin:${PATH}"
+
+_unit_snap() {
+  {
+    for u in app-scale-apply.path app-scale-apply.timer; do
+      echo "=== ${u} ==="
+      systemctl --user is-enabled "${u}" 2>/dev/null || echo "is-enabled:n/a"
+      systemctl --user show "${u}" -p ActiveState,UnitFileState,SubState --no-page 2>/dev/null || echo "show:n/a"
+    done
+  } >"$1"
+}
+_snap_b="$(mktemp)"; _snap_a="$(mktemp)"
+_unit_snap "${_snap_b}"
+
 "${ROOT}/scripts/install-to-local.sh"
 test -x "${tmp}/.local/bin/app-scale"
 test -x "${tmp}/.local/bin/app-scale-managed"
@@ -112,6 +129,15 @@ test ! -e "${tmp}/.config/systemd/user/app-scale-apply.service"
 test ! -e "${tmp}/.config/systemd/user/app-scale-apply.path"
 test ! -e "${tmp}/.config/systemd/user/app-scale-apply.timer"
 test -f "${tmp}/.config/linux-app-scale/config"
+
+
+_unit_snap "${_snap_a}"
+if ! diff -q "${_snap_b}" "${_snap_a}" >/dev/null; then
+  echo "ci-check: live app-scale units changed during CI_TMP install/uninstall:" >&2
+  diff -u "${_snap_b}" "${_snap_a}" >&2 || true
+  exit 1
+fi
+rm -f "${_snap_b}" "${_snap_a}"
 
 # Versioning gate (alkitect public extracts)
 if [[ -f docs/PUBLISH.md ]] && grep -qF 'RC-BEFORE-1.0' docs/PUBLISH.md; then
