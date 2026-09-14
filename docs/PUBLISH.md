@@ -6,13 +6,20 @@ README variant: A
 
 First public tag: v0.1.1
 
+Latest tag: **v0.1.2** (portal README rewrite)
+
 Default first tag is 0.1.0. Never copy another alkitect repo’s tag. Use `RC-BEFORE-1.0` in this file only for an intentional 0.9.x RC.
 
 ```bash
 ./scripts/ci-check.sh
-git tag -a v0.1.1 -m "v0.1.1"
+git tag -a v0.1.2 -m "v0.1.2"
 git push origin main
-git push origin v0.1.1
+git push origin v0.1.2
+gh release create v0.1.2 --title "v0.1.2" --notes-file - <<'EOF'
+## 0.1.2
+
+Portal README rewrite (Install → Try one app, Issues help).
+EOF
 ```
 
 Repo URL: `https://github.com/alkitect/linux-app-scale`

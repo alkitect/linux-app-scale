@@ -2,6 +2,10 @@
 
 ## Unreleased
 
+## 0.1.2 — 2026-09-14
+
+- Docs: portal README (Install → Try one app, Issues help, Releases surface).
+
 ## 0.1.1 — 2026-08-17
 
 - Reconciler wraps only `[Desktop Entry]` `Exec=` (skip Desktop Actions).
