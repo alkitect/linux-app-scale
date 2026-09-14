@@ -4,11 +4,14 @@
 set -euo pipefail
 
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
+# shellcheck source=scripts/lib/automation-wanted.sh
+source "${ROOT}/scripts/lib/automation-wanted.sh"
 BIN="${HOME}/.local/bin"
 CFG_DIR="${XDG_CONFIG_HOME:-${HOME}/.config}/linux-app-scale"
 LIB_DIR="${BIN}/linux-app-scale-lib"
 SYSTEMD_USER="${XDG_CONFIG_HOME:-${HOME}/.config}/systemd/user"
 ENABLE_AUTOMATION=0
+UNITS=(app-scale-apply.path app-scale-apply.timer)
 
 for arg in "$@"; do
   case "${arg}" in
@@ -23,6 +26,8 @@ for arg in "$@"; do
       ;;
   esac
 done
+
+aw_snapshot_units "${UNITS[@]}"
 
 mkdir -p "${BIN}" "${CFG_DIR}/profiles" "${LIB_DIR}" "${SYSTEMD_USER}"
 install -m0755 "${ROOT}/scripts/app-scale" "${BIN}/app-scale"
@@ -65,13 +70,10 @@ echo "  systemctl --user enable --now app-scale-apply.path"
 echo "  systemctl --user enable --now app-scale-apply.timer"
 
 if [[ "${ENABLE_AUTOMATION}" -eq 1 ]]; then
-  if [[ -n "${ALKITECT_CI_TMP:-}" ]]; then
-    echo "ALKITECT_CI_TMP=1: refusing --enable-automation (would touch live systemctl)" >&2
-    exit 1
-  fi
-  echo ""
-  echo "Enabling automation (--enable-automation)..."
-  systemctl --user enable --now app-scale-apply.path
-  systemctl --user enable --now app-scale-apply.timer
+  aw_enable_units "--enable-automation" "${UNITS[@]}"
+  aw_mark_wanted "${CFG_DIR}"
   echo "Automation enabled."
+elif aw_should_restore "${CFG_DIR}"; then
+  aw_enable_units "restored (snapshot/marker)" "${UNITS[@]}"
+  aw_mark_wanted "${CFG_DIR}"
 fi

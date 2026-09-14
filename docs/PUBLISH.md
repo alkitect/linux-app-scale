@@ -6,19 +6,18 @@ README variant: A
 
 First public tag: v0.1.1
 
-Latest tag: **v0.1.2** (portal README rewrite)
+Latest tag: **v0.1.3** (automation.wanted restore)
 
 Default first tag is 0.1.0. Never copy another alkitect repo’s tag. Use `RC-BEFORE-1.0` in this file only for an intentional 0.9.x RC.
 
 ```bash
 ./scripts/ci-check.sh
-git tag -a v0.1.2 -m "v0.1.2"
-git push origin main
-git push origin v0.1.2
-gh release create v0.1.2 --title "v0.1.2" --notes-file - <<'EOF'
-## 0.1.2
+git tag -a v0.1.3 -m "v0.1.3"
+git push origin main v0.1.3
+gh release create v0.1.3 --title "v0.1.3" --notes-file - <<'EOF'
+## 0.1.3
 
-Portal README rewrite (Install → Try one app, Issues help).
+Restore path/timer from automation.wanted or prior enablement on reinstall.
 EOF
 ```
 

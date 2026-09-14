@@ -2,6 +2,11 @@
 
 ## Unreleased
 
+## 0.1.3 — 2026-09-14
+
+- Install: restore path/timer from `automation.wanted` or prior enablement when reinstalling.
+- Helper: vendored `scripts/lib/automation-wanted.sh`.
+
 ## 0.1.2 — 2026-09-14
 
 - Docs: portal README (Install → Try one app, Issues help, Releases surface).
